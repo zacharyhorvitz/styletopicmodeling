@@ -1,0 +1,9 @@
+torch==1.13.0
+pyro-ppl
+scikit-learn
+scipy
+wordcloud
+pandas
+tqdm
+jupyter
+numpy
