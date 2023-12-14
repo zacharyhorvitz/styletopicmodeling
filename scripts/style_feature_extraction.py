@@ -100,114 +100,107 @@ def is_passive(x, passivepy):
     return passivepy.match_text(x, full_passive=True, truncated_passive=True)['binary_truncated_passive'].any()
 
 def process_docs(doc_features, save_path, device='cpu'):
-    # sent_detector = pysbd.Segmenter(language="en", clean=False)
-    # for doc in doc_features:
-    #    doc['sentences'] = to_sentences(doc['text'], sent_detector)
+    sent_detector = pysbd.Segmenter(language="en", clean=False)
+    for doc in doc_features:
+       doc['sentences'] = to_sentences(doc['text'], sent_detector)
 
-    # del sent_detector
+    del sent_detector
     
-    #passivepy = PassivePy.PassivePyAnalyzer(spacy_model = "en_core_web_lg")
+    passivepy = PassivePy.PassivePyAnalyzer(spacy_model = "en_core_web_lg")
 
-    #for doc in tqdm(doc_features, desc='Passive voice'):
-    #    doc['passive'] = [int(is_passive(s, passivepy)) for s in doc['sentences']]
+    for doc in tqdm(doc_features, desc='Passive voice'):
+       doc['passive'] = [int(is_passive(s, passivepy)) for s in doc['sentences']]
 
-    #del passivepy
+    del passivepy
 
-    #with open(save_path, 'w+') as out_file:
-    #    json.dump(doc_features, out_file)
+    with open(save_path, 'w+') as out_file:
+       json.dump(doc_features, out_file)
 
-    #model, tokenizer, _, labels = load_formality_model()
+    model, tokenizer, _, labels = load_formality_model()
 
-    #model.to(device)
+    model.to(device)
 
-    #for doc in tqdm(doc_features, desc='Formality'):
-    #    doc['formality'] = []
-    #    for s in doc['sentences']:
-    #        encoded_input = tokenizer(s, return_tensors='pt')
-    #        encoded_input.to(device)
-    #        output = model(**encoded_input)
-    #        predicted = torch.argmax(torch.softmax(output[0], dim=-1)[0]).item()
-    #        predicted = labels[predicted]
-    #        doc['formality'].append(predicted)
+    for doc in tqdm(doc_features, desc='Formality'):
+       doc['formality'] = []
+       for s in doc['sentences']:
+           encoded_input = tokenizer(s, return_tensors='pt')
+           encoded_input.to(device)
+           output = model(**encoded_input)
+           predicted = torch.argmax(torch.softmax(output[0], dim=-1)[0]).item()
+           predicted = labels[predicted]
+           doc['formality'].append(predicted)
 
-    # del model
+    del model
 
-    #with open(save_path, 'w+') as out_file:
-    #    json.dump(doc_features, out_file)
+    with open(save_path, 'w+') as out_file:
+       json.dump(doc_features, out_file)
 
    
-    # for doc in tqdm(doc_features, desc='POS'):
-    #     doc['pos'] = extract_pos_features(doc['text'])
+    for doc in tqdm(doc_features, desc='POS'):
+        doc['pos'] = extract_pos_features(doc['text'])
 
-    # with open(save_path, 'w+') as out_file:
-    #     json.dump(doc_features, out_file)
+    with open(save_path, 'w+') as out_file:
+        json.dump(doc_features, out_file)
 
-    
+    model, tokenizer, _, labels = load_question_model()
+    model.to(device)
 
+    for doc in tqdm(doc_features, desc='Question'):
+        doc['question'] = []
+        for s in doc['sentences']:
+            encoded_input = tokenizer(s, return_tensors='pt')
+            encoded_input.to(device)
+            output = model(**encoded_input)
+            predicted = torch.argmax(torch.softmax(output[0], dim=-1)[0]).item()
+            predicted = labels[predicted]
+            doc['question'].append(predicted)
 
-    # model, tokenizer, _, labels = load_question_model()
-    # model.to(device)
+    del model
 
-    # for doc in tqdm(doc_features, desc='Question'):
-    #     doc['question'] = []
-    #     for s in doc['sentences']:
-    #         encoded_input = tokenizer(s, return_tensors='pt')
-    #         encoded_input.to(device)
-    #         output = model(**encoded_input)
-    #         predicted = torch.argmax(torch.softmax(output[0], dim=-1)[0]).item()
-    #         predicted = labels[predicted]
-    #         doc['question'].append(predicted)
-
-    # del model
-
-    # with open(save_path, 'w+') as out_file:
-        # json.dump(doc_features, out_file)
+    with open(save_path, 'w+') as out_file:
+        json.dump(doc_features, out_file)
 
     # with open('/burg/nlp/users/zfh2000/enron_processed_backup.json', 'r') as in_file:
-    #     doc_features = json.load(in_file)
+        # doc_features = json.load(in_file)
 
-    # for i, doc in enumerate(doc_features):
-    #     doc['text'] = str(doc['text'])
-    
-
+    for i, doc in enumerate(doc_features):
+        doc['text'] = str(doc['text'])
    
 
-    # print('Vectorizing with gram2vec...')
-    # vectorized = vectorizer.from_documents([doc['text'] for doc in doc_features])
-    # columns = vectorized.columns
-    # for i, doc in enumerate(doc_features):
-    #     doc['gram2vec'] = {k:v for k,v in vectorized.iloc[i].to_dict().items() if not k.startswith('letters')}
+    print('Vectorizing with gram2vec...')
+    vectorized = vectorizer.from_documents([doc['text'] for doc in doc_features])
+    columns = vectorized.columns
+    for i, doc in enumerate(doc_features):
+        doc['gram2vec'] = {k:v for k,v in vectorized.iloc[i].to_dict().items() if not k.startswith('letters')}
 
-    # with open(save_path, 'w+') as out_file:
-    #     json.dump(doc_features, out_file)
+    with open(save_path, 'w+') as out_file:
+        json.dump(doc_features, out_file)
 
-    # model = load_emotion_model()
-    # for doc in tqdm(doc_features, desc='Emotion'):
-    #     doc['emotion'] = {x['label']: int(x['score'] > 0.5) for x in model(doc['text'], max_length=512)[0]}
+    model = load_emotion_model()
+    for doc in tqdm(doc_features, desc='Emotion'):
+        doc['emotion'] = {x['label']: int(x['score'] > 0.5) for x in model(doc['text'], max_length=512)[0]}
     
-    # del model
+    del model
 
-    # with open(save_path, 'w+') as out_file:
-    #     json.dump(doc_features, out_file)
+    with open(save_path, 'w+') as out_file:
+        json.dump(doc_features, out_file)
 
-    with open('/burg/nlp/users/zfh2000/enron_processed_backup.json', 'r') as in_file:
-        doc_features = json.load(in_file)
 
 
     for task in ['emoji', 'emotion', 'hate', 'irony', 'offensive', 'sentiment']:
-        model, tokenizer, _, labels = load_sentiment_model(task=task)
+       model, tokenizer, _, labels = load_sentiment_model(task=task)
 
-        model.to(device)
+       model.to(device)
 
-        for doc in tqdm(doc_features, desc=task):
-            # doc[task+'_task'] = []
-            # for s in doc['sentences']:
-            #     encoded_input = tokenizer(s, return_tensors='pt')
-            #     encoded_input.to(device)
-            #     output = model(**encoded_input)
-            #     predicted = torch.argmax(torch.softmax(output[0], dim=-1)[0]).item()
-            #     predicted = labels[predicted]
-            #     doc[task+'_task'].append(predicted)
+       for doc in tqdm(doc_features, desc=task):
+            doc[task+'_task'] = []
+            for s in doc['sentences']:
+                encoded_input = tokenizer(s, return_tensors='pt')
+                encoded_input.to(device)
+                output = model(**encoded_input)
+                predicted = torch.argmax(torch.softmax(output[0], dim=-1)[0]).item()
+                predicted = labels[predicted]
+                doc[task+'_task'].append(predicted)
 
             encoded_input = tokenizer(doc['sentences'], return_tensors='pt', max_length=512, padding='max_length')
             encoded_input.to(device)
@@ -215,28 +208,64 @@ def process_docs(doc_features, save_path, device='cpu'):
             predicted = torch.argmax(torch.softmax(output[0], dim=-1),-1)
             predicted = [labels[p] for p in predicted]
             doc[task+'_task'] = predicted
-            # print(predicted)
+            print(predicted)
 
-        del model
+       del model
 
-        with open(save_path, 'w+') as out_file:
+       with open(save_path, 'w+') as out_file:
+           json.dump(doc_features, out_file)
+
+    # with open('/burg/nlp/users/zfh2000/enron_processed_backup.json', 'r') as in_file:
+    #     doc_features = json.load(in_file)
+
+    for doc in tqdm(doc_features, desc='casing'):
+         doc['casing'] = []
+         for s in doc['sentences']:
+             if s.isupper():
+                 doc['casing'].append('upper')
+             elif s.islower():
+                 doc['casing'].append('lower')
+             else:
+                 doc['casing'].append('mixed')
+
+    with open(save_path, 'w+') as out_file:
             json.dump(doc_features, out_file)
+
+
+
+
+
+
 
     return doc_features
 
 if __name__ == '__main__':
 
-    file_path = '../data/enron/users_data_50_unique_clean_min_10_fixed_sender.tsv'
-    save_path = '/burg/nlp/users/zfh2000/enron_processed.json'
+    # file_path = '../data/enron/users_data_50_unique_clean_min_10_fixed_sender.tsv'
+    file_path = 'chat_gpt_out.jsonl'
+    save_path = '/burg/nlp/users/zfh2000/gpt_4_enron_processed.json'
 
-    data = pd.read_csv(file_path, sep = '\t', header = None)
-    data.columns = ['author', 'text', 'from', 'to', 'cc', 'bcc', 'meta']
+    # data = pd.read_csv(file_path, sep = '\t', header = None)
+    # data.columns = ['author', 'text', 'from', 'to', 'cc', 'bcc', 'meta']
+
+    # doc_features = []
+    # for i, row in data.iterrows():
+    #     email_data = row.to_dict()
+    #     text = str(email_data.pop('text'))
+    #     doc_features.append({'text':text, 'info':email_data})
 
     doc_features = []
-    for i, row in data.iterrows():
-        email_data = row.to_dict()
-        text = str(email_data.pop('text'))
-        doc_features.append({'text':text, 'info':email_data})
+    with open(file_path, 'r') as in_file:
+        for line in in_file:
+            data = json.loads(line)
+            data['from'] = 'gpt3.5_'+data["author"]
+            text = data['result']
+            if text.startswith('Sure'):
+                text = " ".join(text.split('\n\n')[1:])
+            text = text.strip('"').strip("'").strip()
+            text = text.replace('{"email body": "', '').replace('"}', '')
+            print(text)
+            doc_features.append({'text':text, 'info':data})
 
     # sample_corpus = ['This is a sample sentence. This is another sentence.', 'The book was being read. Did you read the book?', 'LOL :)', 'Thank you sir.', 'I love you <3']
     # sample_corpus = sample_corpus * 1000
