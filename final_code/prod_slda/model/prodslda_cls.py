@@ -147,7 +147,9 @@ class ProdSLDA(nn.Module):
             logkappa = pyro.sample(
                 "logkappa", ProdSLDA.PRIOR_DISTS[self.kappa_prior_dist](logkappa_loc, logkappa_scale).to_event(1))
 
-        # return logtheta, logkappa
+        # print('logtheta_loc', logtheta_loc)
+        # print('logkappa_loc', logtheta_scale)
+        return logtheta_loc, logkappa_loc
             
 
     def beta_document(self):
