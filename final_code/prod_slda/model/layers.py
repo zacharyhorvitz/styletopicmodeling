@@ -9,7 +9,7 @@ class GeneralEncoder(nn.Module):
         General encoder for both topics and styles given data
     '''
     
-    def __init__(self, size_dict, num_topics, hidden, dropout, eps = 1e-10):
+    def __init__(self, size_dict, num_topics, hiddens, full_hidden, dropout, eps = 1e-10):
         super().__init__()
         
         self.eps = eps
@@ -19,10 +19,12 @@ class GeneralEncoder(nn.Module):
         self.drop = nn.Dropout(dropout)  # to avoid component collapse
 
         self.features = sorted(size_dict.keys())
-        self.fc1s = nn.ModuleDict({feature:nn.Linear(self.sizes[feature], hidden) for feature in self.features})
-        self.fc2 = nn.Linear(len(self.features) * hidden, hidden)
-        self.fcmu = nn.Linear(hidden, num_topics)
-        self.fclv = nn.Linear(hidden, num_topics)
+        # self.fc1_topic = nn.Linear(self.sizes['doc'], hidden)
+        # self.fc1_meta  = nn.Linear(sum([v for k,v in self.sizes.items() if k != 'doc']))
+        self.fc1s = nn.ModuleDict({feature:nn.Linear(self.sizes[feature], hiddens[feature]) for feature in self.features})
+        self.fc2 = nn.Linear(sum([h for k,h in hiddens.items() if k in self.sizes.keys()]), full_hidden)
+        self.fcmu = nn.Linear(full_hidden, num_topics)
+        self.fclv = nn.Linear(full_hidden, num_topics)
         
         # Batch norms help to avoid component collapse
         self.bnmu = nn.BatchNorm1d(num_topics, affine=False) 

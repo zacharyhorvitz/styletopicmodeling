@@ -152,8 +152,8 @@ class DocMetaData(Dataset):
         self.dtype = dtype
         
         if self.split_halves:
-            bowh_counts = (bows.toarray().sum(axis= -1) * self.perc_obs).astype(int).tolist()
-    
+            bowh_counts = (bows.toarray().sum(axis= -1) - (bows.toarray().sum(axis= -1) * self.perc_obs).astype(int)).tolist()
+            
             self.bows_h1, self.bows_h2 = [], []
             for bow, bcount in zip(bows, bowh_counts):
                 h1 = bow.toarray().copy().squeeze()
