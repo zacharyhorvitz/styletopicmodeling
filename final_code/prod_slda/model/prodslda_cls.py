@@ -13,10 +13,10 @@ class ProdSLDA(nn.Module):
                    }
     TK_LINKS     = ('none', # Model style and documents independently
                     'kappa_doc', # Allow kappa to effect word distributions
-                    'kappa_doc_style', # Allow kappa to effect word distributions and sampled words to effect style
                    )
     
-    def __init__(self, vocab_size, meta_sizes, num_topics, num_styles, hidden, dropout, 
+    def __init__(self, vocab_size, meta_sizes, num_topics, num_styles, 
+                 topic_hidden, style_hidden, dropout, full_hidden = None,
                  theta_prior_dist = 'gaussian', theta_prior_loc = 0., theta_prior_scale = 1.,
                  kappa_prior_dist = 'laplace', kappa_prior_loc = 0., kappa_prior_scale = 1.,
                  style_topic_link = 'none',
@@ -24,14 +24,17 @@ class ProdSLDA(nn.Module):
         super().__init__()
         
         # Global model variables
-        self.vocab_size = vocab_size
-        self.meta_sizes = meta_sizes
-        self.num_topics = num_topics
-        self.num_styles = num_styles
-        self.hidden     = hidden
-        self.dropout    = dropout
+        self.vocab_size   = vocab_size
+        self.meta_sizes   = meta_sizes
+        self.num_topics   = num_topics
+        self.num_styles   = num_styles
+        self.topic_hidden = topic_hidden
+        self.style_hidden = style_hidden
+        self.dropout      = dropout
 
         self.meta_features = sorted(self.meta_sizes.keys())
+        self.hidden_dict   = {feat: style_hidden for feat in self.meta_features}
+        self.hidden_dict['doc'] = topic_hidden
         
         self.eps = eps
         
@@ -55,21 +58,23 @@ class ProdSLDA(nn.Module):
         # Document style linking
         self.style_topic_link = style_topic_link
         
+        self.full_hidden = int((self.topic_hidden + self.style_hidden)/2.) if full_hidden is None else full_hidden
+        
         if self.style_topic_link not in ProdSLDA.TK_LINKS:
             raise ValueError(f'Link {self.style_topic_link} not yet implemented. Must be one of {", ".join(ProdSLDA.TK_LINKS)}')
         elif self.style_topic_link == 'none':
             # Independent modeling of style and topic, all normal encoder/decoders
             
-            self.encoder = GeneralEncoder({'doc':vocab_size}, num_topics, hidden, dropout, self.eps)
+            self.encoder = GeneralEncoder({'doc':vocab_size}, num_topics, {'doc': self.topic_hidden}, self.full_hidden, dropout, self.eps)
             self.decoder = Decoder(vocab_size, num_topics, dropout)
-            self.style_encoder = GeneralEncoder(meta_sizes, num_styles, hidden, dropout, self.eps)
+            self.style_encoder = GeneralEncoder(meta_sizes, num_styles, self.hidden_dict, self.full_hidden, dropout, self.eps)
             self.style_decoder = nn.ModuleDict({feature: Decoder(meta_s, num_styles, dropout) for feature, meta_s in meta_sizes.items()})
             
         elif self.style_topic_link == 'kappa_doc':
             # raise NotImplementedError()
             # Doc influences kappa encoding, style encoder takes in doc
-            self.encoder = GeneralEncoder({'doc':vocab_size}, num_styles, hidden, dropout, self.eps)
-            self.style_encoder = GeneralEncoder({'doc':vocab_size, **meta_sizes}, num_styles, hidden, dropout, self.eps)
+            self.encoder = GeneralEncoder({'doc':vocab_size}, num_topics, {'doc': self.topic_hidden}, self.full_hidden, dropout, self.eps)
+            self.style_encoder = GeneralEncoder({'doc':vocab_size, **meta_sizes}, num_styles, self.hidden_dict, self.full_hidden, dropout, self.eps)
 
             self.decoder = MetaDocDecoder(vocab_size=vocab_size, num_topics=num_topics, num_styles=num_styles, dropout=dropout)
             self.style_decoder = nn.ModuleDict({feature: Decoder(meta_s, num_styles, dropout) for feature, meta_s in meta_sizes.items()})
@@ -171,42 +176,49 @@ class ProdSLDA(nn.Module):
     
     def reconstruct_doc(self, inputs, use_style = True):
         
-        if self.style_topic_link == 'none':
-            logtheta_loc, _  = self.encoder({'doc':inputs['bow_h1']})
-            theta = F.softmax(logtheta_loc, -1)
-            word_logits = self.decoder(theta)
-            
-        elif self.style_topic_link == 'kappa_doc':
-            logtheta_loc, _  = self.encoder({'doc':inputs['bow_h1']})
-            theta = F.softmax(logtheta_loc, -1)
-            
-            if use_style:
-                logkappa_loc, _ = self.style_encoder({'doc':inputs['bow_h1'], **inputs['meta']})
-                kappa = F.softmax(logkappa_loc, -1)
-            else:
-                kappa = None
-            
-            word_logits = self.decoder(theta, kappa)
+        self.eval()
         
-        recon = F.softmax(word_logits, dim = -1)
-        
-        return recon
+        with torch.no_grad():
+            if self.style_topic_link == 'none':
+                logtheta_loc, _  = self.encoder({'doc':inputs['bow_h1']})
+                theta = F.softmax(logtheta_loc, -1)
+                word_logits = self.decoder(theta)
+
+            elif self.style_topic_link == 'kappa_doc':
+                logtheta_loc, _  = self.encoder({'doc':inputs['bow_h1']})
+                theta = F.softmax(logtheta_loc, -1)
+
+                if use_style:
+                    logkappa_loc, _ = self.style_encoder({'doc':inputs['bow_h1'], **inputs['meta']})
+                    kappa = F.softmax(logkappa_loc, -1)
+                else:
+                    kappa = None
+
+                word_logits = self.decoder(theta, kappa)
+
+            recon = F.softmax(word_logits, dim = -1)
+
+            return recon
     
     def reconstruct_style(self, inputs):
         '''
             Reconstruct style/metadata from document alone by zeroing out metadata.
         '''
         
-        zero_meta = {k:torch.zeros_like(inputs['meta'][k]) for k in inputs['meta'].keys()}
+        self.eval()
         
-        logkappa_loc, _ = self.style_encoder({'doc':inputs['bow'], **zero_meta})
+        with torch.no_grad():
+        
+            zero_meta = {k:torch.zeros_like(inputs['meta'][k]) for k in inputs['meta'].keys()}
 
-        kappa = F.softmax(logkappa_loc, dim = -1)
-        
-        s_recon = {feature:self.style_decoder[feature](kappa) for feature in self.meta_features}
-        s_recon = {feature:F.softmax(s_recon[feature], dim = -1) for feature in self.meta_features}
-        
-        return s_recon
+            logkappa_loc, _ = self.style_encoder({'doc':inputs['bow'], **zero_meta})
+
+            kappa = F.softmax(logkappa_loc, dim = -1)
+
+            s_recon = {feature:self.style_decoder[feature](kappa) for feature in self.meta_features}
+            s_recon = {feature:F.softmax(s_recon[feature], dim = -1) for feature in self.meta_features}
+
+            return s_recon
     
     def doc_reconstruct_ce(self, inputs, use_style = True):
     
