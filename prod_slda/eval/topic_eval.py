@@ -69,7 +69,54 @@ def calc_style_perp(prod_slda, eval_dl, device):
         total_count += count
     return torch.exp(total_ce/total_count).item()
 
-# ----- Topic Metrics -----
+def full_perp_eval(prod_slda, eval_dl, device):
+    doc_perp      = calc_doc_perp(prod_slda, eval_dl, device)
+    doc_only_perp = calc_doc_perp(prod_slda, eval_dl, device, use_style = False)
+    style_perp    = calc_style_perp(prod_slda, eval_dl, device)
+    
+    return doc_perp, doc_only_perp, style_perp
 
-def topic_coherence(prod_slda, train_bows, topk = 20):
+
+# ----- Topic Metrics -----
+def single_topic_coherence(topic, cooc_mat, sing_freqs):
+    eps = 1e-9
+    
+    # Get idxs of all term combinations within topic as flat lists
+    idx_0 = topic.repeat(topic.shape[0] - 1)
+    idx_1 = circulant(topic[::-1])[::-1][:, 1:].flatten()
+    term_cooc = np.array(cooc_mat[idx_0, idx_1])
+    # print(term_cooc)
+    
+    # Calc coherence
+    numer = np.log(term_cooc + eps) - (np.log(sing_freqs[idx_0]) + np.log(sing_freqs[idx_1]))
+    denom = -np.log(term_cooc + eps)
+    coh = numer/denom
+    
+    # Safely replace non coocurring terms with -1's
+    coh[cooc_mat[idx_0, idx_1] == 0] = 0
+    
+    return np.mean(coh)
+    
+def topic_coherence(topics, bows):
+    pres_bows = (bows > 0).astype(int)
+    cooc_mat = (pres_bows.T @ pres_bows)/pres_bows.shape[0]
+    sing_freqs = cooc_mat.diagonal()
+    
+    cohs = []
+    for topic in topics:
+        cohs.append(single_topic_coherence(topic, cooc_mat, sing_freqs))
+        
+    return np.mean(cohs), cohs
+
+def topic_diversity(topics):
+    uniq_cnt = np.unique(topics).shape[0]
+    total_cnt = np.prod(topics.shape)
+    return uniq_cnt/total_cnt
+    
+def between_topic_diversity(topics1, topics2):
+    uniq_1 = np.unique(topics1)
+    uniq_2 = np.unique(topics2)
+    inter_uniq = np.unique(np.array([topics1, topics2]))
+    
+    return inter_uniq.shape[0]/(uniq_1.shape[0] + uniq_2.shape[0])
 
